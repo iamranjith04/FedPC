@@ -17,8 +17,8 @@ print(f"🏥 {hospital} started")
 
 ds = NPZDataset(f"fedpc_bloodmnist_npz/{hospital}/train.npz")
 dl = DataLoader(ds, BATCH_SIZE, shuffle=True)
-
-model = CNN(len(ds.classes))
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+model = CNN(len(ds.classes), device=device)
 opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 sock = socket.socket()

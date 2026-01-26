@@ -11,30 +11,54 @@ def evaluate_global(global_protos, device="cpu"):
         print("⚠️ Encoder not found — skipping global evaluation")
         return None
 
-    model = CNN(num_classes=1)  # classifier unused
+    model = CNN(num_classes=1)
     model.encoder.load_state_dict(
-        torch.load(BACKBONE_PATH, map_location=device)
+        torch.load(BACKBONE_PATH, map_location=device, weights_only=True)
     )
+    model.to(device)
     model.eval()
-
 
     correct, total = 0, 0
 
     for h in ["hospital_1", "hospital_2", "hospital_3"]:
-        ds = NPZDataset(f"fedpc_bloodmnist_npz/{h}/test.npz")
+        test_path = f"fedpc_bloodmnist_npz/{h}/test.npz"
+        if not os.path.exists(test_path):
+            continue
+            
+        ds = NPZDataset(test_path)
         dl = DataLoader(ds, batch_size=128)
 
         with torch.no_grad():
             for x, _, yg in dl:
+                x = x.to(device)
                 _, feats = model(x, return_feat=True)
+                
                 for f, y in zip(feats, yg):
-                    sims = {
-                        cid: torch.cosine_similarity(f, proto, dim=0)
-                        for cid, proto in global_protos.items()
-                    }
-                    pred = max(sims, key=sims.get)
-                    if pred == y.item():
+                    y_int = int(y)
+                    
+                    if y_int not in global_protos:
+                        continue
+                    
+                    best_sim = -float('inf')
+                    best_class = None
+                    
+                    for class_id, proto in global_protos.items():
+                        proto = proto.to(device)
+                        sim = torch.cosine_similarity(
+                            f.unsqueeze(0), 
+                            proto.unsqueeze(0), 
+                            dim=1
+                        ).item()
+                        
+                        if sim > best_sim:
+                            best_sim = sim
+                            best_class = class_id
+                    
+                    if best_class == y_int:
                         correct += 1
                     total += 1
 
+    if total == 0:
+        return None
+        
     return 100.0 * correct / total
